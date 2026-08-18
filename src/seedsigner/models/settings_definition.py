@@ -237,6 +237,19 @@ class SettingsConstants:
         (CAMERA_ROTATION__270, _mft("270°")),
     ]
 
+    # Degrees clockwise the physical screen (and the button/joystick PCB it's mounted
+    # on) has been rotated relative to its factory-default orientation.
+    SCREEN_ROTATION__0 = 0
+    SCREEN_ROTATION__90 = 90
+    SCREEN_ROTATION__180 = 180
+    SCREEN_ROTATION__270 = 270
+    ALL_SCREEN_ROTATIONS = [
+        (SCREEN_ROTATION__0, _mft("0°")),
+        (SCREEN_ROTATION__90, _mft("90°")),
+        (SCREEN_ROTATION__180, _mft("180°")),
+        (SCREEN_ROTATION__270, _mft("270°")),
+    ]
+
     # QR code constants
     DENSITY__LOW = "L"
     DENSITY__MEDIUM = "M"
@@ -336,6 +349,7 @@ class SettingsConstants:
 
     SETTING__DISPLAY_CONFIGURATION = "display_config"
     SETTING__DISPLAY_COLOR_INVERTED = "color_inverted"
+    SETTING__SCREEN_ROTATION = "screen_rotation"
 
     SETTING__NETWORK = "network"
     SETTING__QR_DENSITY = "qr_density"
@@ -736,6 +750,18 @@ class SettingsDefinition:
                       type=SettingsConstants.TYPE__ENABLED_DISABLED,
                       visibility=SettingsConstants.VISIBILITY__HARDWARE,
                       default_value=SettingsConstants.OPTION__DISABLED),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__SYSTEM,
+                      attr_name=SettingsConstants.SETTING__SCREEN_ROTATION,
+                      abbreviated_name="screen_rot",
+                      # TRANSLATOR_NOTE: Hardware settings option to rotate the screen to match how the board is physically mounted.
+                      display_name=_mft("Rotate screen"),
+                      type=SettingsConstants.TYPE__SELECT_1,
+                      visibility=SettingsConstants.VISIBILITY__HARDWARE,
+                      # TRANSLATOR_NOTE: Clarifies that the joystick/buttons rotate along with the screen.
+                      help_text=_mft("Also rotates the joystick/button mapping"),
+                      selection_options=SettingsConstants.ALL_SCREEN_ROTATIONS,
+                      default_value=SettingsConstants.SCREEN_ROTATION__0),
 
 
         # Developer options

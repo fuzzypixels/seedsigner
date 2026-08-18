@@ -250,7 +250,7 @@ class SettingsEntryUpdateSelectionView(View):
             value=updated_value
         )
 
-        if self.settings_entry.attr_name == SettingsConstants.SETTING__DISPLAY_CONFIGURATION:
+        if self.settings_entry.attr_name in [SettingsConstants.SETTING__DISPLAY_CONFIGURATION, SettingsConstants.SETTING__SCREEN_ROTATION]:
             self.renderer.initialize_display()
 
         elif self.settings_entry.attr_name == SettingsConstants.SETTING__DISPLAY_COLOR_INVERTED:
@@ -316,10 +316,12 @@ class SettingsIngestSettingsQRView(View):
         # user.
         self.config_name, settings_update_dict = Settings.parse_settingsqr(data)
 
-        changes_display_driver = (
-            SettingsConstants.SETTING__DISPLAY_CONFIGURATION in settings_update_dict and
-            self.settings.get_value(SettingsConstants.SETTING__DISPLAY_CONFIGURATION) != settings_update_dict[SettingsConstants.SETTING__DISPLAY_CONFIGURATION])
-            
+        changes_display_driver = False
+        for attr_name in [SettingsConstants.SETTING__DISPLAY_CONFIGURATION, SettingsConstants.SETTING__SCREEN_ROTATION]:
+            if attr_name in settings_update_dict and self.settings.get_value(attr_name) != settings_update_dict[attr_name]:
+                changes_display_driver = True
+                break
+
         self.settings.update(settings_update_dict)
 
         if changes_display_driver:

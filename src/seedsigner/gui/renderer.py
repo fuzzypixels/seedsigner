@@ -12,6 +12,7 @@ class Renderer(ConfigurableSingleton):
     buttons = None
     canvas_width = 0
     canvas_height = 0
+    screen_rotation = 0
     canvas: Image.Image = None
     draw: ImageDraw.ImageDraw = None
     disp = None
@@ -62,16 +63,40 @@ class Renderer(ConfigurableSingleton):
             self.canvas_width = self.disp.height
             self.canvas_height = self.disp.width
 
+        # Degrees clockwise the physical screen has been mounted relative to its
+        # factory-default orientation; see SettingsConstants.SETTING__SCREEN_ROTATION.
+        # The GUI always draws "upright" into canvas_width/canvas_height -- the actual
+        # compensating rotation onto the physical panel happens in show_image().
+        self.screen_rotation = int(Settings.get_instance().get_value(SettingsConstants.SETTING__SCREEN_ROTATION, default_if_none=True))
+        if self.screen_rotation in (90, 270):
+            # The GUI's upright canvas is rotated 90/270 relative to the physical
+            # panel, so its logical width/height are swapped from the panel's.
+            self.canvas_width, self.canvas_height = self.canvas_height, self.canvas_width
+
         self.canvas = Image.new('RGB', (self.canvas_width, self.canvas_height))
         self.draw = ImageDraw.Draw(self.canvas)
 
         self.lock.release()
 
 
+    def _to_physical_orientation(self, image: Image.Image) -> Image.Image:
+        """
+        Rotates a canvas-oriented image (canvas_width x canvas_height) into the
+        physical panel's native orientation (disp.width x disp.height), compensating
+        for `self.screen_rotation`.
+        """
+        if self.screen_rotation == 0:
+            return image
+        # PIL rotates counter-clockwise for positive angles; rotating the "upright"
+        # canvas counter-clockwise by screen_rotation compensates for the panel
+        # having been physically mounted screen_rotation degrees clockwise.
+        return image.rotate(self.screen_rotation, expand=True)
+
+
     def show_image(self, image=None, alpha_overlay=None, show_direct=False):
         if show_direct:
             # Use the incoming image as the canvas and immediately render
-            self.disp.show_image(image, 0, 0)
+            self.disp.show_image(self._to_physical_orientation(image), 0, 0)
             return
 
         if alpha_overlay:
@@ -83,7 +108,7 @@ class Renderer(ConfigurableSingleton):
             # Always write to the current canvas, rather than trying to replace it
             self.canvas.paste(image)
 
-        self.disp.show_image(self.canvas, 0, 0)
+        self.disp.show_image(self._to_physical_orientation(self.canvas), 0, 0)
 
 
     def show_image_pan(self, image, start_x, start_y, end_x, end_y, rate, alpha_overlay=None):
@@ -117,7 +142,7 @@ class Renderer(ConfigurableSingleton):
             # Always keep a copy of the current display in the canvas
             self.canvas.paste(crop)
 
-            self.disp.show_image(crop, 0, 0)
+            self.disp.show_image(self._to_physical_orientation(crop), 0, 0)
 
 
 

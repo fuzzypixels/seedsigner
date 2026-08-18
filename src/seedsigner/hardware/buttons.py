@@ -3,6 +3,7 @@ from typing import List
 import RPi.GPIO as GPIO
 import time
 
+from seedsigner.models.settings import Settings, SettingsConstants
 from seedsigner.models.singleton import Singleton
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,50 @@ class HardwareButtons(Singleton):
         return cls._instance
 
 
+    def _dpad_rotation_offset(self) -> int:
+        """
+        Number of 90-degree clockwise steps the d-pad's physical pins must be shifted
+        by to compensate for the current SETTING__SCREEN_ROTATION.
+        """
+        screen_rotation = int(Settings.get_instance().get_value(SettingsConstants.SETTING__SCREEN_ROTATION, default_if_none=True))
+        return (screen_rotation // 90) % 4
+
+
+    def _to_physical_key(self, logical_key: int) -> int:
+        """
+        Translates a logical (i.e. as perceived by the user, post-rotation) d-pad
+        direction into the physical GPIO pin that must be polled to detect it.
+        Non-directional keys (KEY_PRESS, KEY1-3) pass through unchanged.
+        """
+        dpad = HardwareButtonsConstants.DPAD_PHYSICAL_CLOCKWISE
+        if logical_key not in dpad:
+            return logical_key
+        offset = self._dpad_rotation_offset()
+        if offset == 0:
+            return logical_key
+        logical_index = dpad.index(logical_key)
+        return dpad[(logical_index - offset) % 4]
+
+
+    def _to_logical_key(self, physical_key: int) -> int:
+        """ The inverse of `_to_physical_key`: physical pin -> perceived direction. """
+        dpad = HardwareButtonsConstants.DPAD_PHYSICAL_CLOCKWISE
+        if physical_key not in dpad:
+            return physical_key
+        offset = self._dpad_rotation_offset()
+        if offset == 0:
+            return physical_key
+        physical_index = dpad.index(physical_key)
+        return dpad[(physical_index + offset) % 4]
+
+
     def wait_for(self, keys=[]) -> int:
         """
         Block execution until one of the target keys is pressed.
+
+        `keys` and the returned value are in logical (i.e. as the user currently
+        perceives them, post-SETTING__SCREEN_ROTATION) terms; the actual GPIO polling
+        below is translated to/from the physical pins.
 
         Optionally override the wait by calling `trigger_override()`.
         """
@@ -74,6 +116,8 @@ class HardwareButtons(Singleton):
         from seedsigner.controller import Controller
         controller = Controller.get_instance()
         self.override_ind = False
+
+        keys = [self._to_physical_key(key) for key in keys]
 
         while True:
             if self.override_ind:
@@ -103,7 +147,7 @@ class HardwareButtons(Singleton):
                         self.cur_input = key
                         self.cur_input_started = int(time.time() * 1000)  # in milliseconds
                         self.last_input_time = self.cur_input_started
-                        return key
+                        return self._to_logical_key(key)
 
                     else:
                         # Still pressing the same input
@@ -112,13 +156,13 @@ class HardwareButtons(Singleton):
                             #   continuous input. Treat as a new separate press.
                             self.cur_input_started = cur_time
                             self.last_input_time = cur_time
-                            return key
+                            return self._to_logical_key(key)
 
                         elif cur_time - self.cur_input_started > self.first_repeat_threshold:
                             # We're good to relay this immediately as continuous
                             #   input.
                             self.last_input_time = cur_time
-                            return key
+                            return self._to_logical_key(key)
 
                         else:
                             # We're not yet at the first repeat threshold; triggering
@@ -146,9 +190,10 @@ class HardwareButtons(Singleton):
 
 
     def check_for_low(self, key: int = None, keys: List[int] = None) -> bool:
-        """ Returns True if one of the target keys/key is pressed """
+        """ Returns True if one of the target keys/key is pressed. `key`/`keys` are logical. """
         if key:
             keys = [key]
+        keys = [self._to_physical_key(key) for key in keys]
         for key in keys:
             if self.GPIO.input(key) == self.GPIO.LOW:
                 self.update_last_input_time()
@@ -203,3 +248,10 @@ class HardwareButtonsConstants:
 
     KEYS__LEFT_RIGHT_UP_DOWN = [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN]
     KEYS__ANYCLICK = [KEY_PRESS, KEY1, KEY2, KEY3]
+
+    # The 4-way d-pad's *physical* GPIO pins, in clockwise order starting from the
+    # factory-default "up" pin. Used to remap the d-pad when the screen (and the PCB
+    # it's mounted on) has been physically rotated; see
+    # SettingsConstants.SETTING__SCREEN_ROTATION. KEY_PRESS/KEY1/KEY2/KEY3 are not
+    # directional and are unaffected by screen rotation.
+    DPAD_PHYSICAL_CLOCKWISE = [KEY_UP, KEY_RIGHT, KEY_DOWN, KEY_LEFT]
